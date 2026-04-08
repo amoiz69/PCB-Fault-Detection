@@ -1,0 +1,41 @@
+# PCB Defect Detection - Training Configuration
+
+model: yolov8s.pt          # Pretrained weights (yolov8n = faster, yolov8s = better accuracy)
+data: configs/dataset.yaml
+
+# Training hyperparameters
+epochs: 100
+patience: 20               # Early stopping patience
+batch: 16
+imgsz: 640
+optimizer: AdamW
+lr0: 0.001                 # Initial learning rate
+lrf: 0.01                  # Final LR = lr0 * lrf
+momentum: 0.937
+weight_decay: 0.0005
+warmup_epochs: 3
+warmup_momentum: 0.8
+
+# Augmentation (important for small PCB dataset)
+augment: true
+hsv_h: 0.015               # Hue augmentation
+hsv_s: 0.7                 # Saturation augmentation
+hsv_v: 0.4                 # Value/brightness augmentation
+degrees: 10.0              # Rotation ±10°
+translate: 0.1
+scale: 0.5
+flipud: 0.5
+fliplr: 0.5
+mosaic: 1.0                # Mosaic augmentation (helps small objects)
+mixup: 0.1
+
+# Output
+project: runs
+name: pcb_defect_v1
+save: true
+save_period: 10            # Save checkpoint every N epochs
+plots: true                # Generate training plots
+
+# Hardware
+device: mps                # Apple Metal GPU ('cpu' if no GPU)
+workers: 4

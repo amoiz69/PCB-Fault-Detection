@@ -1,0 +1,8 @@
+ultralytics>=8.0.0
+opencv-python>=4.8.0
+scikit-learn>=1.3.0
+matplotlib>=3.7.0
+pyyaml>=6.0
+wandb>=0.16.0        # optional: experiment tracking
+roboflow>=1.1.0      # optional: dataset management
+jupyter>=1.0.0       # optional: for notebooks

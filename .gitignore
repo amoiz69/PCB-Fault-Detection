@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+env/
+.env/
+.venv/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Data (large binary/image files)
+data/raw/
+data/processed/
+*.zip
+*.tar.gz
+*.tar
+
+# Model weights (large binaries)
+*.pt
+*.pth
+*.onnx
+*.engine
+*.tflite
+
+# YOLOv8 training runs (artifacts, weights, logs)
+runs/
+
+# Misc
+.DS_Store
+.idea/
+.vscode/
+*.log

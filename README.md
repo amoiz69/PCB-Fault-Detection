@@ -1,3 +1,13 @@
+---
+title: PCB Defect Inspector
+emoji: 🔍
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # PCB Defect Inspector — Phase 2 (Web App)
 
 FastAPI backend + React frontend wrapping the Phase 1 YOLOv8 model.

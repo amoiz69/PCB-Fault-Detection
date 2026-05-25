@@ -1,7 +1,7 @@
 // frontend/src/components/StatsBar.jsx
 // --------------------------------------
-// Top bar showing aggregate stats: total inspected, pass rate, top defect.
-// Fetches from /api/stats on mount and refreshes after each new inspection.
+// Top bar showing aggregate stats: total inspected, pass rate,
+// average quality score, and top defect type.
 
 function StatCard({ label, value, sub, color }) {
   return (
@@ -11,6 +11,7 @@ function StatCard({ label, value, sub, color }) {
       borderRadius: "10px",
       background: "white",
       border: "1px solid #e5e7eb",
+      minWidth: "120px",
     }}>
       <p style={{ margin: "0 0 2px", fontSize: "12px", color: "#6b7280", fontWeight: 500 }}>
         {label}
@@ -23,6 +24,15 @@ function StatCard({ label, value, sub, color }) {
       )}
     </div>
   );
+}
+
+function qualityColor(score) {
+  if (score == null) return "#111827";
+  if (score >= 90)   return "#16a34a";
+  if (score >= 75)   return "#2563eb";
+  if (score >= 60)   return "#d97706";
+  if (score >= 40)   return "#ea580c";
+  return "#dc2626";
 }
 
 export default function StatsBar({ stats }) {
@@ -60,15 +70,16 @@ export default function StatsBar({ stats }) {
         color={stats.pass_rate >= 80 ? "#15803d" : "#b91c1c"}
       />
       <StatCard
+        label="Avg quality score"
+        value={stats.avg_quality_score != null ? stats.avg_quality_score.toFixed(1) : "—"}
+        sub="out of 100"
+        color={qualityColor(stats.avg_quality_score)}
+      />
+      <StatCard
         label="Most common defect"
         value={topDefect ? topDefect[0].replace(/_/g, " ") : "None"}
         sub={topDefect ? `${topDefect[1]} instance${topDefect[1] !== 1 ? "s" : ""}` : ""}
         color="#7c3aed"
-      />
-      <StatCard
-        label="Defect types seen"
-        value={Object.keys(breakdown).length}
-        sub="out of 6 possible"
       />
     </div>
   );

@@ -5,6 +5,7 @@ POST /inspect  — accepts an image, runs inference, saves result to DB.
 GET  /history  — returns all past inspections (newest first).
 GET  /stats    — aggregate stats: total inspected, pass rate, common defects.
 GET  /image/{inspection_id} — serves the original uploaded image.
+GET  /report/{inspection_id} — returns a full structured JSON inspection report.
 """
 
 import json
@@ -38,9 +39,9 @@ async def inspect_image(
     """
     1. Validate the uploaded file is an image.
     2. Save it to disk with a unique name (avoids overwrite collisions).
-    3. Run YOLOv8 inference.
+    3. Run YOLOv8 inference (now includes severity scoring).
     4. Persist the result to SQLite.
-    5. Return the full detection payload to the frontend.
+    5. Return the full detection + severity payload to the frontend.
     """
     # Validate extension
     suffix = Path(file.filename).suffix.lower()
@@ -57,37 +58,44 @@ async def inspect_image(
     with save_path.open("wb") as f:
         shutil.copyfileobj(file.file, f)
 
-    # Run inference
+    # Run inference (detections are now enriched with severity fields)
     try:
         result = run_inference(str(save_path))
     except Exception as e:
         save_path.unlink(missing_ok=True)   # clean up on failure
         raise HTTPException(status_code=500, detail=f"Inference failed: {e}")
 
-    # Persist to DB
+    # Persist to DB — including new severity fields
     inspection = Inspection(
-        filename      = file.filename,
-        timestamp     = datetime.utcnow(),
-        passed        = result["passed"],
-        defect_count  = result["defect_count"],
-        confidence_avg = result["confidence_avg"],
-        detections    = json.dumps(result["detections"]),
-        image_path    = str(save_path),
+        filename         = file.filename,
+        timestamp        = datetime.utcnow(),
+        passed           = result["passed"],
+        defect_count     = result["defect_count"],
+        confidence_avg   = result["confidence_avg"],
+        detections       = json.dumps(result["detections"]),
+        image_path       = str(save_path),
+        quality_score    = result["quality_score"],
+        grade            = result["grade"],
+        severity_summary = json.dumps(result["severity_summary"]),
     )
     db.add(inspection)
     db.commit()
     db.refresh(inspection)
 
     return {
-        "id":            inspection.id,
-        "filename":      file.filename,
-        "timestamp":     inspection.timestamp.isoformat(),
-        "passed":        result["passed"],
-        "defect_count":  result["defect_count"],
-        "confidence_avg": result["confidence_avg"],
-        "image_width":   result["image_width"],
-        "image_height":  result["image_height"],
-        "detections":    result["detections"],
+        "id":               inspection.id,
+        "filename":         file.filename,
+        "timestamp":        inspection.timestamp.isoformat(),
+        "passed":           result["passed"],
+        "defect_count":     result["defect_count"],
+        "confidence_avg":   result["confidence_avg"],
+        "image_width":      result["image_width"],
+        "image_height":     result["image_height"],
+        "detections":       result["detections"],
+        "quality_score":    result["quality_score"],
+        "grade":            result["grade"],
+        "severity_summary": result["severity_summary"],
+        "recommendation":   result["recommendation"],
     }
 
 
@@ -104,13 +112,16 @@ def get_history(limit: int = 50, db: Session = Depends(get_db)):
     )
     return [
         {
-            "id":            r.id,
-            "filename":      r.filename,
-            "timestamp":     r.timestamp.isoformat(),
-            "passed":        r.passed,
-            "defect_count":  r.defect_count,
-            "confidence_avg": r.confidence_avg,
-            "detections":    json.loads(r.detections),
+            "id":               r.id,
+            "filename":         r.filename,
+            "timestamp":        r.timestamp.isoformat(),
+            "passed":           r.passed,
+            "defect_count":     r.defect_count,
+            "confidence_avg":   r.confidence_avg,
+            "detections":       json.loads(r.detections),
+            "quality_score":    r.quality_score,
+            "grade":            r.grade,
+            "severity_summary": json.loads(r.severity_summary) if r.severity_summary else None,
         }
         for r in rows
     ]
@@ -126,7 +137,8 @@ def get_stats(db: Session = Depends(get_db)):
     if not all_rows:
         return {
             "total": 0, "passed": 0, "failed": 0,
-            "pass_rate": None, "defect_breakdown": {}
+            "pass_rate": None, "defect_breakdown": {},
+            "avg_quality_score": None,
         }
 
     total  = len(all_rows)
@@ -139,12 +151,58 @@ def get_stats(db: Session = Depends(get_db)):
             name = det["class_name"]
             defect_breakdown[name] = defect_breakdown.get(name, 0) + 1
 
+    # Average quality score (only rows that have scores)
+    scored_rows = [r.quality_score for r in all_rows if r.quality_score is not None]
+    avg_quality = round(sum(scored_rows) / len(scored_rows), 1) if scored_rows else None
+
     return {
-        "total":            total,
-        "passed":           passed,
-        "failed":           total - passed,
-        "pass_rate":        round(passed / total * 100, 1),
-        "defect_breakdown": defect_breakdown,
+        "total":             total,
+        "passed":            passed,
+        "failed":            total - passed,
+        "pass_rate":         round(passed / total * 100, 1),
+        "defect_breakdown":  defect_breakdown,
+        "avg_quality_score": avg_quality,
+    }
+
+
+# ── GET /report/{id} ──────────────────────────────────────────────────────────
+
+@router.get("/report/{inspection_id}")
+def get_report(inspection_id: int, db: Session = Depends(get_db)):
+    """
+    Return a structured JSON inspection report for a given board.
+    This is the document you'd save or email after an inspection.
+    """
+    row = db.query(Inspection).filter(Inspection.id == inspection_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Inspection not found.")
+
+    detections = json.loads(row.detections)
+    severity_summary = json.loads(row.severity_summary) if row.severity_summary else None
+
+    # Derive recommendation from grade (fallback for old records with no grade)
+    grade = row.grade or "N/A"
+    recommendations = {
+        "A": "Board is in excellent condition. Approved for assembly.",
+        "B": "Board is acceptable. Minor review recommended before assembly.",
+        "C": "Board is marginal. Rework advised before assembly.",
+        "D": "Board has significant defects. Rework required.",
+        "F": "Board is rejected. Critical defects detected — do not assemble.",
+    }
+    recommendation = recommendations.get(grade, "Re-run inspection with updated model.")
+
+    return {
+        "inspection_id":    row.id,
+        "filename":         row.filename,
+        "timestamp":        row.timestamp.isoformat(),
+        "passed":           row.passed,
+        "defect_count":     row.defect_count,
+        "confidence_avg":   row.confidence_avg,
+        "quality_score":    row.quality_score,
+        "grade":            grade,
+        "severity_summary": severity_summary,
+        "recommendation":   recommendation,
+        "detections":       detections,
     }
 
 

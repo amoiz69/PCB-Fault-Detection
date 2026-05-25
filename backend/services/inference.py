@@ -13,6 +13,8 @@ from typing import Optional
 from ultralytics import YOLO
 from PIL import Image
 
+from services.severity import score_detections
+
 # ── Class definitions (must match your training config) ───────────────────────
 CLASS_NAMES = [
     "missing_hole",
@@ -120,11 +122,20 @@ def run_inference(image_path: str, conf_threshold: float = 0.25) -> dict:
         if detections else None
     )
 
+    # ── Severity scoring ──────────────────────────────────────────────────────
+    # Enriches each detection in-place and returns board-level scores.
+    severity_report = score_detections(detections, img_w, img_h)
+
     return {
-        "detections":    detections,
-        "defect_count":  len(detections),
-        "passed":        len(detections) == 0,
-        "confidence_avg": conf_avg,
-        "image_width":   img_w,
-        "image_height":  img_h,
+        "detections":       detections,
+        "defect_count":     len(detections),
+        "passed":           len(detections) == 0,
+        "confidence_avg":   conf_avg,
+        "image_width":      img_w,
+        "image_height":     img_h,
+        # Severity additions
+        "quality_score":    severity_report["quality_score"],
+        "grade":            severity_report["grade"],
+        "severity_summary": severity_report["severity_summary"],
+        "recommendation":   severity_report["recommendation"],
     }

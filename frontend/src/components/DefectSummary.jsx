@@ -1,7 +1,13 @@
 // frontend/src/components/DefectSummary.jsx
 // -------------------------------------------
 // Shows the verdict (PASS / FAIL) and a list of all detected defects
-// with their class, confidence, and a colour swatch.
+// with their class, confidence, severity badge, size, and colour swatch.
+
+const SEVERITY_BADGE = {
+  critical: { bg: "#fef2f2", color: "#dc2626", border: "#fecaca", label: "CRITICAL" },
+  major:    { bg: "#fff7ed", color: "#ea580c", border: "#fed7aa", label: "MAJOR"    },
+  minor:    { bg: "#fffbeb", color: "#ca8a04", border: "#fde68a", label: "MINOR"    },
+};
 
 export default function DefectSummary({ result }) {
   if (!result) return null;
@@ -47,47 +53,76 @@ export default function DefectSummary({ result }) {
             Detected defects
           </p>
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            {detections.map((det, i) => (
-              <div key={i} style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "10px",
-                padding: "8px 12px",
-                borderRadius: "6px",
-                background: "#f9fafb",
-                border: "1px solid #e5e7eb",
-                fontSize: "14px",
-              }}>
-                {/* Colour swatch matching the canvas box */}
-                <span style={{
-                  width: "12px", height: "12px",
-                  borderRadius: "3px",
-                  background: det.color,
-                  flexShrink: 0,
-                }}/>
-
-                <span style={{ flex: 1, fontWeight: 500, color: "#111827" }}>
-                  {det.class_name.replace(/_/g, " ")}
-                </span>
-
-                {/* Confidence pill */}
-                <span style={{
-                  fontSize: "12px",
-                  padding: "2px 8px",
-                  borderRadius: "999px",
-                  background: "#e0e7ff",
-                  color: "#4338ca",
-                  fontWeight: 500,
+            {detections.map((det, i) => {
+              const sev = det.severity ? SEVERITY_BADGE[det.severity] : null;
+              return (
+                <div key={i} style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  padding: "8px 12px",
+                  borderRadius: "6px",
+                  background: "#f9fafb",
+                  border: `1px solid ${sev?.border || "#e5e7eb"}`,
+                  fontSize: "14px",
+                  flexWrap: "wrap",
                 }}>
-                  {(det.confidence * 100).toFixed(1)}%
-                </span>
+                  {/* Colour swatch matching the canvas box */}
+                  <span style={{
+                    width: "12px", height: "12px",
+                    borderRadius: "3px",
+                    background: det.color,
+                    flexShrink: 0,
+                  }}/>
 
-                {/* Pixel coordinates */}
-                <span style={{ fontSize: "12px", color: "#9ca3af", fontFamily: "monospace" }}>
-                  [{det.bbox.x1}, {det.bbox.y1}]
-                </span>
-              </div>
-            ))}
+                  <span style={{ flex: 1, fontWeight: 500, color: "#111827", minWidth: "100px" }}>
+                    {det.class_name.replace(/_/g, " ")}
+                  </span>
+
+                  {/* Severity badge */}
+                  {sev && (
+                    <span style={{
+                      fontSize: "10px",
+                      padding: "2px 7px",
+                      borderRadius: "4px",
+                      background: sev.bg,
+                      border: `1px solid ${sev.border}`,
+                      color: sev.color,
+                      fontWeight: 700,
+                      letterSpacing: "0.04em",
+                      flexShrink: 0,
+                    }}>
+                      {sev.label}
+                    </span>
+                  )}
+
+                  {/* Confidence pill */}
+                  <span style={{
+                    fontSize: "12px",
+                    padding: "2px 8px",
+                    borderRadius: "999px",
+                    background: "#e0e7ff",
+                    color: "#4338ca",
+                    fontWeight: 500,
+                    flexShrink: 0,
+                  }}>
+                    {(det.confidence * 100).toFixed(1)}%
+                  </span>
+
+                  {/* Size */}
+                  {det.area_pct != null && (
+                    <span style={{ fontSize: "12px", color: "#9ca3af", flexShrink: 0 }}>
+                      {det.area_pct.toFixed(2)}% of board
+                    </span>
+                  )}
+
+                  {/* Pixel coordinates */}
+                  <span style={{ fontSize: "12px", color: "#9ca3af", fontFamily: "monospace", flexShrink: 0 }}>
+                    [{det.bbox.x1}, {det.bbox.y1}]
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

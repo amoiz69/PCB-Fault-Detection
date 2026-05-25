@@ -16,6 +16,7 @@ import { inspectImage, getHistory, getStats, getImageUrl } from "./api/client";
 import UploadZone    from "./components/UploadZone";
 import DetectionCanvas from "./components/DetectionCanvas";
 import DefectSummary from "./components/DefectSummary";
+import SeverityReport from "./components/SeverityReport";
 import HistoryPanel  from "./components/HistoryPanel";
 import StatsBar      from "./components/StatsBar";
 
@@ -72,15 +73,20 @@ export default function App() {
     setImageUrl(getImageUrl(item.id));
     // Reconstruct the result shape from the history item
     setResult({
-      passed:        item.passed,
-      defect_count:  item.defect_count,
-      confidence_avg: item.confidence_avg,
-      detections:    item.detections,
+      id:              item.id,
+      filename:        item.filename,
+      passed:          item.passed,
+      defect_count:    item.defect_count,
+      confidence_avg:  item.confidence_avg,
+      detections:      item.detections,
       // History items don't store image dimensions — default to 640×640
-      // The canvas scaling will be slightly off but still functional.
-      // To fix properly: add image_width/image_height columns to the DB.
-      image_width:   640,
-      image_height:  640,
+      image_width:     640,
+      image_height:    640,
+      // Severity fields
+      quality_score:    item.quality_score,
+      grade:            item.grade,
+      severity_summary: item.severity_summary,
+      recommendation:   null,   // not stored in history; report endpoint has it
     });
   };
 
@@ -169,6 +175,7 @@ export default function App() {
                 imageHeight={result?.image_height || 640}
               />
               <DefectSummary result={result} />
+              <SeverityReport result={result} />
             </div>
           )}
         </div>

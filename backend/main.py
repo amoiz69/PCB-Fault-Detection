@@ -14,6 +14,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from models.database import create_tables
 from routers.inspect import router as inspect_router
@@ -66,11 +67,15 @@ app.add_middleware(
 # Register routes — all endpoints live under /api/
 app.include_router(inspect_router, prefix="/api")
 
-
-@app.get("/")
-def root():
-    return {
-        "status": "running",
-        "docs": "http://localhost:8000/docs",
-        "endpoints": ["/api/inspect", "/api/history", "/api/stats", "/api/image/{id}"],
-    }
+# Serve frontend static files if they exist (for single-container deployment)
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+if STATIC_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
+else:
+    @app.get("/")
+    def root():
+        return {
+            "status": "running",
+            "docs": "http://localhost:8000/docs",
+            "endpoints": ["/api/inspect", "/api/history", "/api/stats", "/api/image/{id}"],
+        }

@@ -17,13 +17,15 @@ export default function DetectionCanvas({ imageUrl, detections, imageWidth, imag
   const canvasRef = useRef(null);
   const imgRef    = useRef(null);
 
-  // Redraw whenever the image or detections change
   useEffect(() => {
     const canvas = canvasRef.current;
     const img    = imgRef.current;
     if (!canvas || !img || !detections) return;
 
     const draw = () => {
+      // Guard: if the image hasn't rendered yet it will have clientWidth = 0
+      if (img.clientWidth === 0 || img.clientHeight === 0) return;
+
       const ctx = canvas.getContext("2d");
 
       // Match canvas internal resolution to displayed size
@@ -31,31 +33,32 @@ export default function DetectionCanvas({ imageUrl, detections, imageWidth, imag
       canvas.height = img.clientHeight;
 
       // Scale factor: displayed size vs actual pixel size from the model
-      const scaleX = img.clientWidth  / imageWidth;
-      const scaleY = img.clientHeight / imageHeight;
+      const scaleX = img.clientWidth  / (imageWidth  || img.naturalWidth  || img.clientWidth);
+      const scaleY = img.clientHeight / (imageHeight || img.naturalHeight || img.clientHeight);
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      detections.forEach(({ bbox, class_name, confidence, color }) => {
+      (detections || []).forEach(({ bbox, class_name, confidence, color }) => {
+        if (!bbox) return;
         const x = bbox.x1 * scaleX;
         const y = bbox.y1 * scaleY;
         const w = bbox.width  * scaleX;
         const h = bbox.height * scaleY;
 
         // Box border
-        ctx.strokeStyle = color;
+        ctx.strokeStyle = color || "#ef4444";
         ctx.lineWidth   = 2;
         ctx.strokeRect(x, y, w, h);
 
         // Label background pill
-        const label    = `${class_name} ${(confidence * 100).toFixed(0)}%`;
-        ctx.font       = "bold 12px sans-serif";
-        const textW    = ctx.measureText(label).width;
-        const padX     = 6;
-        const padY     = 4;
-        const labelH   = 18;
+        const label = `${class_name.replace(/_/g, " ")} ${(confidence * 100).toFixed(0)}%`;
+        ctx.font    = "bold 12px sans-serif";
+        const textW = ctx.measureText(label).width;
+        const padX  = 6;
+        const padY  = 4;
+        const labelH = 18;
 
-        ctx.fillStyle = color;
+        ctx.fillStyle = color || "#ef4444";
         ctx.beginPath();
         ctx.roundRect(x - 1, y - labelH - padY * 2, textW + padX * 2, labelH + padY, 4);
         ctx.fill();
@@ -66,16 +69,23 @@ export default function DetectionCanvas({ imageUrl, detections, imageWidth, imag
       });
     };
 
-    // Draw once the image has loaded (may already be loaded from cache)
-    if (img.complete) {
+    // Always hook onload — this fires whether the image is cached or fresh.
+    // Setting src on a new URL resets img.complete to false, so we can't
+    // rely on img.complete being true at the time this effect runs.
+    img.onload = draw;
+
+    // If the browser already has this image in cache, onload won't fire again.
+    // In that case img.complete is already true — draw immediately.
+    if (img.complete && img.naturalWidth > 0) {
       draw();
-    } else {
-      img.onload = draw;
     }
 
     // Redraw if the window is resized (display size changes, scale changes)
     window.addEventListener("resize", draw);
-    return () => window.removeEventListener("resize", draw);
+    return () => {
+      window.removeEventListener("resize", draw);
+      img.onload = null;
+    };
   }, [imageUrl, detections, imageWidth, imageHeight]);
 
   return (

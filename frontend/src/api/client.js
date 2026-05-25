@@ -64,3 +64,15 @@ export async function getStats() {
 export function getImageUrl(inspectionId) {
   return `${BASE_URL}/image/${inspectionId}`;
 }
+
+/**
+ * GET /api/report/{id}
+ * Fetches the full structured JSON inspection report for a board.
+ *
+ * @param {number} inspectionId
+ */
+export async function getReport(inspectionId) {
+  const res = await fetch(`${BASE_URL}/report/${inspectionId}`);
+  if (!res.ok) throw new Error(`Failed to fetch report: HTTP ${res.status}`);
+  return res.json();
+}

@@ -8,143 +8,149 @@ app_port: 7860
 pinned: false
 ---
 
-# 🔍 PCB Defect Inspector — Phase 2 (Web App)
+# PCB Defect Inspector
 
-An interactive, AI-powered printed circuit board (PCB) defect inspection system. It combines a high-performance **FastAPI backend** running custom **YOLOv8** computer vision inference with a modern, reactive **React (Vite) frontend** to identify, grade, and evaluate PCB defects in real-time.
+A web application for automated printed circuit board (PCB) quality control. Upload a PCB image and get instant defect detection powered by a custom-trained YOLOv8 model — with annotated bounding boxes, per-defect severity ratings, and an overall board quality grade.
 
----
+**[Live Demo on Hugging Face Spaces](https://huggingface.co/spaces/amoiz22/pcb-defect-inspector)**
 
-## 🚀 Live Demo on Hugging Face
-
-> [!TIP]
-> **Test the live web application immediately on Hugging Face Spaces!**
-> 
-> 👉 **[ADD YOUR HUGGING FACE DEMO LINK HERE]** 👈
-> 
-> *Note: The first launch might take a moment to spin up as the backend loads the 22MB PyTorch YOLOv8 model into memory.*
+> The first launch may take a moment while the backend loads the YOLOv8 model into memory.
 
 ---
 
-## 🌟 Key Features
+## What It Does
 
-* **Real-time Defect Detection**: Leverages a custom-trained **YOLOv8 model** (`best.pt`) to locate and classify defects instantly.
-* **Defect Severity & Quality Grading**: Calculates an overall board quality score (0–100) and assigns an industrial quality grade (**A to F**) based on the size, class, and critical nature of the defects.
-* **Interactive Canvas Bounding Boxes**: A dynamic `<canvas>` overlay displaying color-coded bounding boxes that automatically scale to fit any screen resolution or image aspect ratio.
-* **Inspection History Sidebar**: Keep track of previous inspections. Clicking on any historical inspection automatically reloads its details, annotations, and visual bboxes.
-* **Aggregate Statistics Dashboard**: Computes real-time analytics including average pass rates, total defect counts, and a distribution breakdown across defect classes.
-* **Unified Single-Container Deployment**: Fully containerized using a multi-stage Docker build, enabling both the frontend and backend to run together on a single port for zero-CORS production deployments.
+Upload a PCB image. The app runs it through a YOLOv8 model trained on six defect classes, draws annotated bounding boxes on the image, and returns:
 
----
+- A per-defect breakdown with severity ratings (critical / major / minor)
+- An overall board quality score (0–100) and industrial grade (A–F)
+- A pass/fail recommendation
 
-## 🎯 Defect Classes Detected
-
-The model is trained to detect six distinct manufacturing defects, color-coded for quick identification:
-
-* 🔴 **Missing Hole** (`missing_hole`) - Drilling failures.
-* 🟠 **Mouse Bite** (`mouse_bite`) - Edge chipping or copper erosion.
-* 🟡 **Open Circuit** (`open_circuit`) - Disconnected copper traces.
-* 🟢 **Short Circuit** (`short`) - Accidental connections between traces.
-* 🟣 **Spur** (`spur`) - Small unwanted protrusions on trace lines.
-* 🔵 **Spurious Copper** (`spurious_copper`) - Leftover copper fragments in isolated areas.
+All inspections are saved to a local SQLite database. A history sidebar lets you revisit past inspections, and a stats dashboard shows aggregate metrics across all runs.
 
 ---
 
-## 🏗️ Architecture & Request Flow
+## Defect Classes
+
+The model detects six PCB manufacturing defects:
+
+| Class | Description |
+|---|---|
+| `missing_hole` | Drilling failure — expected hole not present |
+| `mouse_bite` | Edge chipping or copper erosion along the board boundary |
+| `open_circuit` | Disconnected copper trace |
+| `short` | Accidental connection between two traces |
+| `spur` | Small unwanted protrusion on a trace |
+| `spurious_copper` | Isolated copper fragment left over from etching |
+
+---
+
+## How It Works
+
+### Architecture
 
 ```mermaid
 graph TD
-    User([User's Browser]) -->|1. Upload zone / drag-and-drop| React[React Frontend]
-    React -->|2. POST /api/inspect Form-Data| FastAPI[FastAPI Backend]
-    
-    subgraph FastAPI Container
-        FastAPI -->|3. Save image| Uploads[(backend/uploads/)]
-        FastAPI -->|4. Call| Model[YOLOv8 Model Singleton]
-        Model -->|Inference| Detections[Raw Bounding Boxes]
-        Detections -->|5. Evaluate| Severity[Severity & Grading Service]
-        Severity -->|6. Save record| SQLite[(inspections.db)]
+    User([Browser]) -->|Upload image| React[React Frontend]
+    React -->|POST /api/inspect| FastAPI[FastAPI Backend]
+
+    subgraph Container
+        FastAPI -->|Save UUID-named file| Uploads[(uploads/)]
+        FastAPI --> Model[YOLOv8 Singleton]
+        Model --> Detections[Raw Bounding Boxes]
+        Detections --> Severity[Severity & Grading Service]
+        Severity --> SQLite[(inspections.db)]
     end
-    
-    FastAPI -->|7. Return JSON response| React
-    React -->|8. Redraw with coordinates| Canvas[Interactive Canvas Overlay]
+
+    FastAPI -->|JSON response| React
+    React --> Canvas[Canvas Bbox Overlay]
 ```
+
+### Request Flow
+
+1. The browser sends the image as `multipart/form-data` to `POST /api/inspect`.
+2. FastAPI saves the file under a UUID filename (prevents collisions), then calls the YOLOv8 model singleton.
+3. The model returns raw bounding boxes; the severity service enriches each detection with a severity tier, computes the board-level quality score, and writes the record to SQLite.
+4. The JSON response goes back to React, which draws scaled bounding boxes on a `<canvas>` element overlaid on the original image.
+
+**Why a singleton?** Loading the YOLOv8 model takes ~1–2 seconds. The model is loaded once at startup via FastAPI's lifespan context manager and reused for every request.
 
 ---
 
-## 🛠️ Folder Structure
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Model | YOLOv8 (`best.pt`), trained on a labeled PCB defect dataset |
+| Backend | FastAPI, SQLAlchemy, SQLite, Ultralytics |
+| Frontend | React 18, Vite, HTML Canvas API |
+| Deployment | Multi-stage Docker build (single container, single port) |
+
+---
+
+## Project Structure
 
 ```
 pcb-phase2/
-├── Dockerfile                   ← Unified multi-stage Docker build
-├── backend/                     ← FastAPI Python Backend
-│   ├── main.py                  ← FastAPI entry point & Static Mounts
-│   ├── requirements.txt         ← Backend packages (PyTorch, Ultralytics, etc.)
+├── Dockerfile                   # Multi-stage build: Node build → Python runtime
+├── backend/
+│   ├── main.py                  # FastAPI app, lifespan startup, static file mount
+│   ├── requirements.txt
 │   ├── models/
-│   │   ├── database.py          ← SQLAlchemy Schema & Auto-Migrations
-│   │   └── best.pt              ← YOLOv8 weights (LFS-tracked)
+│   │   ├── database.py          # SQLAlchemy schema + safe ALTER TABLE migrations
+│   │   └── best.pt              # YOLOv8 weights (Git LFS)
 │   ├── routers/
-│   │   └── inspect.py           ← API Routes (/inspect, /history, /stats)
+│   │   └── inspect.py           # All API routes: /inspect, /history, /stats, /image, /report
 │   └── services/
-│       ├── inference.py         ← Model Singleton wrapper
-│       └── severity.py          ← Defect grading & recommendation engine
-├── frontend/                    ← React Vite Frontend
-│   ├── package.json
-│   ├── vite.config.js           ← Development reverse proxy configuration
-│   └── src/
-│       ├── App.jsx              ← Main controller / App State
-│       ├── api/
-│       │   └── client.js        ← Centralized API Client (relative /api pathing)
-│       └── components/          ← Reusable UI Modules
-│           ├── UploadZone.jsx   ← Drag-and-drop target
-│           ├── DetectionCanvas.jsx ← Overlay Canvas draw engine
-│           ├── SeverityReport.jsx  ← Board Grade & Action Recommendations
-│           ├── HistoryPanel.jsx    ← Database Inspection History
-│           └── StatsBar.jsx        ← System metrics dashboard
+│       ├── inference.py         # Model singleton + run_inference()
+│       └── severity.py          # score_detections() — severity tiers and grading logic
+└── frontend/src/
+    ├── App.jsx                  # Single source of truth for all app state
+    ├── api/client.js            # Centralized fetch wrapper (proxied to /api in dev)
+    └── components/
+        ├── UploadZone.jsx       # Drag-and-drop file input
+        ├── DetectionCanvas.jsx  # Canvas bbox rendering with coordinate scaling
+        ├── SeverityReport.jsx   # Board grade + recommendations display
+        ├── HistoryPanel.jsx     # Past inspections list
+        └── StatsBar.jsx         # Aggregate metrics dashboard
 ```
 
 ---
 
-## 💻 Local Development Setup
+## Running Locally
 
-### Backend (Python)
-1. Navigate to the backend directory and set up a virtual environment:
-   ```bash
-   cd backend
-   python3 -m venv .venv
-   source .venv/bin/activate
-   ```
-2. Install packages:
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. Run the FastAPI development server:
-   ```bash
-   uvicorn main:app --reload --port 8000
-   ```
-   *The interactive API documentation is available at `http://localhost:8000/docs`.*
+**Requirements:** Python 3.9+ and Node 18+.
 
-### Frontend (React + Vite)
-1. Navigate to the frontend directory:
-   ```bash
-   cd ../frontend
-   ```
-2. Install dependencies and start the development server:
-   ```bash
-   npm install
-   npm run dev
-   ```
-3. Open `http://localhost:5173` in your browser. All `/api` routes are automatically proxied to the FastAPI server running on port `8000`.
-
----
-
-## 🐳 Docker Execution
-
-You can build and run the entire application as a single Docker container locally on port 7860:
+### Backend (port 8000)
 
 ```bash
-# Build the unified image
-docker build -t pcb-inspector .
+cd backend
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+```
 
-# Start the container
+Interactive API docs available at `http://localhost:8000/docs`.
+
+### Frontend (port 5173)
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173`. Vite proxies `/api/*` → `http://localhost:8000` automatically — no environment variables needed in development.
+
+---
+
+## Docker
+
+Build and run the entire stack as a single container:
+
+```bash
+docker build -t pcb-inspector .
 docker run -p 7860:7860 pcb-inspector
 ```
-*Visit `http://localhost:7860` to access the full application.*
+
+Visit `http://localhost:7860`.
